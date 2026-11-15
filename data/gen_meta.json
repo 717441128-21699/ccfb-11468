@@ -1,0 +1,12 @@
+{
+  "seconds": 5.99,
+  "rows": {
+    "impressions": 10000000,
+    "clicks_raw": 357091,
+    "orders": 267714,
+    "refunds": 26771,
+    "logins": 1439439,
+    "devices": 1799566
+  },
+  "base_logit": -3.958
+}

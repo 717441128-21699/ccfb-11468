@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>广告归因看板</title>
+<style>
+:root{--bg:#f5f6fa;--card:#fff;--ink:#1c2333;--sub:#6b7280;--line:#e5e7eb;
+--acc:#4f6ef7;--acc2:#12b5a5;--warn:#e8734a;--good:#2fa866;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 20px 60px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:4px}
+h1{font-size:22px;margin:0}
+.muted{color:var(--sub);font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12.5px;color:var(--sub)}
+.chip b{color:var(--ink)}
+nav.tabs{display:flex;gap:4px;border;border-bottom:2px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+nav.tabs button{border:0;background:none;padding:10px 16px;font-size:14.5px;cursor:pointer;color:var(--sub);border-bottom:2px solid transparent;margin-bottom:-2px}
+nav.tabs button.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+section.page{display:none}
+section.page.on{display:block}
+.grid{display:grid;gap:12px}
+.cards{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card .v{font-size:22px;font-weight:700;margin-top:2px}
+.card .k{color:var(--sub);font-size:12.5px}
+.card .s{color:var(--sub);font-size:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-top:14px}
+.panel h3{margin:0 0 10px;font-size:15.5px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--sub);font-weight:600;font-size:12.5px}
+tr:hover td{background:#f8f9ff}
+.bar{height:8px;border-radius:4px;background:var(--acc);display:inline-block;vertical-align:middle}
+.bar.t{background:var(--acc2)}
+.bar.w{background:var(--warn)}
+.barrow{display:flex;align-items:center;gap:8px}
+.barrow .lbl{width:8.5em;color:var(--sub);font-size:12.5px;text-align:right;flex:none}
+.barrow .val{width:5.5em;font-size:12.5px;flex:none}
+.track{flex:1;background:#eef0f6;border-radius:4px;height:10px;overflow:hidden}
+.track>i{display:block;height:100%;background:var(--acc);border-radius:4px}
+.pos{color:var(--warn)} .neg{color:var(--good)}
+.tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:12px;background:#eef0ff;color:var(--acc)}
+.note{font-size:12.5px;color:var(--sub);margin-top:8px}
+svg text{font-size:11px;fill:var(--sub)}
+.legend{display:flex;gap:14px;font-size:12.5px;color:var(--sub);flex-wrap:wrap;margin:6px 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+select{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+footer{margin-top:26px;color:var(--sub);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>广告归因看板</h1>
+    <span class="muted" id="genat"></span>
+  </header>
+  <div class="chips" id="chips"></div>
+  <nav class="tabs" id="tabs"></nav>
+  <section class="page" id="p-ingest"></section>
+  <section class="page" id="p-identity"></section>
+  <section class="page" id="p-models"></section>
+  <section class="page" id="p-report"></section>
+  <section class="page" id="p-paths"></section>
+  <footer id="foot"></footer>
+</div>
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>
+const DATA = JSON.parse(document.getElementById('data').textContent);
+const CH = DATA.meta.channels, MODELS = DATA.meta.models;
+const fmt = n => n==null?'-':Number(n).toLocaleString('zh-CN',{maximumFractionDigits:1});
+const fmt0 = n => n==null?'-':Math.round(Number(n)).toLocaleString('zh-CN');
+const pct = n => n==null?'-':Number(n).toFixed(2)+'%';
+const el = h => {const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild};
+
+// ---------- 框架 ----------
+const TABS = [['ingest','数据接入'],['identity','用户识别'],['models','归因模型'],['report','渠道报表'],['paths','路径分析']];
+const nav = document.getElementById('tabs');
+TABS.forEach(([id,name],i)=>{
+  const b = el(`<button data-t="${id}" class="${i==0?'on':''}">${name}</button>`);
+  b.onclick = ()=>{document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('section.page').forEach(s=>s.classList.toggle('on',s.id==='p-'+id));};
+  nav.appendChild(b);
+});
+document.getElementById('p-ingest').classList.add('on');
+document.getElementById('genat').textContent = '生成于 '+DATA.meta.generated_at;
+document.getElementById('chips').innerHTML = [
+  ['回溯窗口', DATA.meta.window_days+' 天'],['时间衰减半衰期', DATA.meta.half_life_days+' 天'],
+  ['数据天数', DATA.meta.days+' 天'],['曝光量', fmt0(DATA.ingest.impressions)],
+  ['流水线耗时', DATA.meta.pipeline_seconds+' 秒'],['随机种子', DATA.meta.seed],
+].map(([k,v])=>`<span class="chip">${k} <b>${v}</b></span>`).join('');
+document.getElementById('foot').textContent =
+  '分步耗时: '+Object.entries(DATA.meta.timings).map(([k,v])=>k+' '+v+'s').join(' · ');
+
+function cards(elm, items){
+  elm.appendChild(el(`<div class="grid cards">${items.map(([k,v,s])=>
+    `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s||''}</div></div>`).join('')}</div>`));
+}
+function lineChart(series, labels, h=180){
+  const w=Math.max(600, labels.length*26), pad=34;
+  const max=Math.max(...series.flatMap(s=>s.values))*1.1||1;
+  const x=i=>pad+i*(w-pad-10)/Math.max(labels.length-1,1), y=v=>h-18-(v/max)*(h-44);
+  let inner='';
+  series.forEach(s=>{
+    const pts=s.values.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    inner+=`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2"/>`;
+  });
+  const xl=labels.map((l,i)=>i%Math.ceil(labels.length/10)===0?`<text x="${x(i)}" y="${h-4}" text-anchor="middle">${l}</text>`:'').join('');
+  const yl=[0,.5,1].map(f=>`<text x="4" y="${y(max*f)+4}">${fmt0(max*f)}</text><line x1="${pad}" x2="${w-4}" y1="${y(max*f)}" y2="${y(max*f)}" stroke="#eef0f6"/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%">${yl}${inner}${xl}</svg>`;
+}
+
+// ---------- 1. 数据接入 ----------
+(function(){
+  const p=document.getElementById('p-ingest'), g=DATA.ingest;
+  cards(p,[
+    ['曝光日志',fmt0(g.impressions),'条'],['点击日志(原始)',fmt0(g.clicks_raw),'条'],
+    ['点击去重剔除',fmt0(g.clicks_dup_removed),'同 click_id 渠道重复上报'],
+    ['点击(去重后)',fmt0(g.clicks_dedup),'条'],['下单日志',fmt0(g.orders),'单'],
+    ['退款日志',fmt0(g.refunds),'笔'],['登录事件',fmt0(g.logins),'条'],
+    ['统一触点流',fmt0(g.touches),'曝光+去重点击'],
+  ]);
+  const d=DATA.report.daily;
+  p.appendChild(el(`<div class="panel"><h3>每日事件量</h3>
+    <div class="legend"><span><i style="background:#4f6ef7"></i>曝光</span><span><i style="background:#12b5a5"></i>点击(去重)</span><span><i style="background:#e8734a"></i>下单</span></div>
+    ${lineChart([{values:d.map(r=>r.impressions),color:'#4f6ef7'},{values:d.map(r=>r.clicks),color:'#12b5a5'},{values:d.map(r=>r.orders),color:'#e8734a'}], d.map(r=>r.date))}
+    <div class="note">曝光/点击/下单三份日志按统一身份 + 时间戳串联,回溯窗口 ${DATA.meta.window_days} 天(可配)。</div></div>`));
+})();
+
+// ---------- 2. 用户识别 ----------
+(function(){
+  const p=document.getElementById('p-identity'), s=DATA.identity;
+  cards(p,[
+    ['设备总数',fmt0(s.devices),'台'],['注册用户',fmt0(s.users),'个'],
+    ['登录关联边',fmt0(s.login_links),'设备↔用户'],['合并后身份',fmt0(s.identities),'个'],
+    ['多设备身份',fmt0(s.multi_device_identities),'同人手机+电脑等'],
+    ['匿名设备',fmt0(s.anonymous_devices),'从未登录'],['已知但未登录设备',fmt0(s.known_no_login_devices),'台'],
+  ]);
+  const dist=s.devices_per_identity, tot=dist['1台']+dist['2台']+dist['3台及以上'];
+  p.appendChild(el(`<div class="panel"><h3>每个身份的设备数分布</h3>${
+    Object.entries(dist).map(([k,v])=>`<div class="barrow"><span class="lbl">${k}</span>
+      <span class="track"><i style="width:${(100*v/tot).toFixed(1)}%"></i></span>
+      <span class="val">${fmt0(v)} (${(100*v/tot).toFixed(1)}%)</span></div>`).join('')}
+    <div class="note">登录事件构成 设备↔用户 二分图,并查集合并连通分量得到统一身份;曝光、点击按设备ID、下单按用户ID 都归一到同一身份后再串联。匿名设备各自成为独立身份。</div></div>`));
+})();
+
+// ---------- 3. 归因模型 ----------
+(function(){
+  const p=document.getElementById('p-models'), M=DATA.models;
+  cards(p, MODELS.map(m=>[m,'MAE '+M.mae[m]+'pp','最大偏差 '+M.max_dev[m]+'pp'])
+    .concat([['净转化合计',fmt0(M.total_net_orders),'退款冲回后']]));
+  // 模型排名
+  const ranked=[...MODELS].sort((a,b)=>M.mae[a]-M.mae[b]);
+  p.appendChild(el(`<div class="panel"><h3>与真实因果设定的偏差排名(越小越好)</h3>${
+    ranked.map((m,i)=>`<div class="barrow"><span class="lbl">${i+1}. ${m}</span>
+      <span class="track"><i style="width:${(100*M.mae[m]/Math.max(...MODELS.map(x=>M.mae[x]))).toFixed(1)}%;${i==0?'background:var(--good)':''}"></i></span>
+      <span class="val">MAE ${M.mae[m]}pp</span></div>`).join('')}
+    <div class="note">真实设定:转化 logit = base + Σ 渠道因果效应 × 触点数;各渠道效应:${CH.map(c=>c+' '+DATA.meta.channel_effect[c]).join(' / ')}。偏差单位:百分点(pp)。</div></div>`));
+  // 份额对比表
+  const rows=[...CH,'未归因/自然'].map(c=>{
+    const t=M.shares['真实份额'][c];
+    const cells=MODELS.map(m=>{
+      const v=M.shares[m][c], dv=(v-t);
+      const cls=dv>0.5?'pos':(dv<-0.5?'neg':'');
+      return `<td>${pct(v)}<br><span class="${cls}" style="font-size:11px">${dv>=0?'+':''}${dv.toFixed(2)}</span></td>`;
+    }).join('');
+    return `<tr><td>${c}</td><td><b>${pct(t)}</b></td>${cells}</tr>`;
+  }).join('');
+  p.appendChild(el(`<div class="panel"><h3>渠道份额:五模型 vs 真实份额(净转化口径,单元格下行为与真实值偏差)</h3>
+    <div style="overflow-x:auto"><table><tr><th>渠道</th><th>真实份额</th>${MODELS.map(m=>`<th>${m}</th>`).join('')}</tr>${rows}</table></div></div>`));
+  // 分组条形
+  const allM=[...MODELS,'真实份额'];
+  const maxV=Math.max(...allM.flatMap(m=>CH.map(c=>M.shares[m][c])));
+  const colors=['#4f6ef7','#8b5cf6','#12b5a5','#f0a02f','#e8734a','#1c2333'];
+  p.appendChild(el(`<div class="panel"><h3>份额对比图</h3>
+    <div class="legend">${allM.map((m,i)=>`<span><i style="background:${colors[i]}"></i>${m}</span>`).join('')}</div>
+    ${CH.map(c=>`<div style="margin-bottom:8px"><div style="font-size:12.5px;color:var(--sub)">${c}</div>
+      ${allM.map((m,i)=>`<div class="barrow"><span class="lbl" style="width:5em">${m}</span>
+        <span class="track"><i style="width:${(100*M.shares[m][c]/maxV).toFixed(1)}%;background:${colors[i]}"></i></span>
+        <span class="val">${pct(M.shares[m][c])}</span></div>`).join('')}</div>`).join('')}</div>`));
+  // 退款冲回
+  p.appendChild(el(`<div class="panel"><h3>退款冲回(各模型归因转化:毛 → 冲回 → 净)</h3>
+    <table><tr><th>模型</th><th>毛归因转化</th><th>退款冲回</th><th>净归因转化</th></tr>
+    ${[...MODELS,'真实份额'].map(m=>`<tr><td>${m}</td><td>${fmt(M.totals[m].gross)}</td>
+      <td class="pos">-${fmt(M.totals[m].reversed)}</td><td><b>${fmt(M.totals[m].net)}</b></td></tr>`).join('')}</table>
+    <div class="note">退款订单 ${fmt0(DATA.refunds.refunded_orders)} 笔(${DATA.refunds.refund_rate}%),退款金额 ¥${fmt0(DATA.refunds.refund_amount)},归因结果按订单净额系数同步冲回。</div></div>`));
+})();
+
+// ---------- 4. 渠道报表 ----------
+(function(){
+  const p=document.getElementById('p-report'), R=DATA.report;
+  let curModel='末次点击', curCh=CH[0];
+  const head=el(`<div class="grid cards"></div>`);p.appendChild(head);
+  head.innerHTML=[['渠道自报转化合计',fmt0(R.self_report_total),'各渠道平台口径相加'],
+    ['实际净转化',fmt0(DATA.models.total_net_orders),''],
+    ['自报/实际',R.self_over_actual+'×','重复认领导致的虚高'],
+    ['对照模型',`<select id="selM">${MODELS.map(m=>`<option>${m}</option>`).join('')}</select>`,'报表归因列随选择切换']]
+    .map(([k,v,s])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+  const tbl=el(`<div class="panel"><h3>分渠道总览(自报 vs 归因 vs 真实)</h3><div style="overflow-x:auto"><table id="chT"></table></div>
+    <div class="note">自报口径:窗口内该渠道有触点即全量认领订单(模拟平台上报)。倍数 = 自报净转化 / 所选模型净归因转化。</div></div>`);
+  p.appendChild(tbl);
+  const chT=tbl.querySelector('#chT');
+  function renderCh(){
+    chT.innerHTML=`<tr><th>渠道</th><th>曝光</th><th>点击</th><th>CTR</th><th>自报转化</th><th>归因转化(${curModel})</th><th>真实转化</th><th>自报/归因</th><th>净收入(末次点击)</th></tr>`+
+      R.channels.map(r=>`<tr><td>${r.channel}</td><td>${fmt0(r.impressions)}</td><td>${fmt0(r.clicks)}</td>
+        <td>${r.ctr}%</td><td>${fmt0(r.self_conv)}</td><td><b>${fmt(r.attr_conv[curModel])}</b></td>
+        <td>${fmt(r.truth_conv)}</td><td class="pos">${(r.self_conv_net/Math.max(r.attr_conv[curModel],1e-9)).toFixed(2)}×</td>
+        <td>¥${fmt0(r.net_rev)}</td></tr>`).join('');
+  }
+  renderCh();
+  // 活动级
+  const camp=el(`<div class="panel"><h3>活动级(按天 × 活动可拆,此处为全周期汇总)</h3><div style="overflow-x:auto"><table id="cpT"></table></div></div>`);
+  p.appendChild(camp);
+  const cpT=camp.querySelector('#cpT');
+  function renderCamp(){
+    cpT.innerHTML=`<tr><th>渠道</th><th>活动</th><th>曝光</th><th>点击</th><th>CTR</th><th>归因转化(${curModel})</th></tr>`+
+      R.campaigns.map(r=>`<tr><td>${r.channel}</td><td>${r.campaign}</td><td>${fmt0(r.impressions)}</td>
+        <td>${fmt0(r.clicks)}</td><td>${(100*r.clicks/Math.max(r.impressions,1)).toFixed(2)}%</td>
+        <td><b>${fmt(r.attr_conv[curModel])}</b></td></tr>`).join('');
+  }
+  renderCamp();
+  // 每日趋势
+  const tr=el(`<div class="panel"><h3>每日趋势:<select id="selCh">${CH.map(c=>`<option>${c}</option>`).join('')}</select></h3><div id="trC"></div>
+    <div class="legend"><span><i style="background:#4f6ef7"></i>归因转化(所选模型)</span><span><i style="background:#e8734a"></i>曝光(缩放显示)</span></div></div>`);
+  p.appendChild(tr);
+  function renderTrend(){
+    const d=R.daily;
+    const attr=d.map(r=>r.by_channel[curCh].attr[curModel]);
+    const imp=d.map(r=>r.by_channel[curCh].impressions);
+    const scale=Math.max(...attr)/Math.max(...imp,1);
+    tr.querySelector('#trC').innerHTML=lineChart([{values:attr,color:'#4f6ef7'},{values:imp.map(v=>v*scale),color:'#e8734a'}],d.map(r=>r.date));
+  }
+  renderTrend();
+  head.querySelector('#selM').onchange=e=>{curModel=e.target.value;renderCh();renderCamp();renderTrend();};
+  tr.querySelector('#selCh').onchange=e=>{curCh=e.target.value;renderTrend();};
+})();
+
+// ---------- 5. 路径分析 ----------
+(function(){
+  const p=document.getElementById('p-paths'), P=DATA.paths;
+  cards(p,[
+    ['平均触点数',P.avg_touches,'窗口内每转化订单'],['平均点击数',P.avg_clicks,''],
+    ['平均路径时长',P.avg_span_h+' 小时','首末触点间隔'],['单触点转化占比',P.single_touch_pct+'%','只被触达一次就下单'],
+    ['有触点订单',fmt0(P.orders_with_touch),'窗口内至少一个触点'],
+  ]);
+  const maxC=Math.max(...P.top.map(t=>t.count));
+  p.appendChild(el(`<div class="panel"><h3>最常见渠道路径 TOP ${P.top.length}(连续同渠道去重)</h3>
+    ${P.top.map(t=>`<div class="barrow"><span class="lbl" style="width:22em;text-align:left;overflow:hidden;text-overflow:ellipsis">${t.path}</span>
+      <span class="track"><i style="width:${(100*t.count/maxC).toFixed(1)}%"></i></span>
+      <span class="val">${fmt0(t.count)} (${t.pct}%)</span></div>`).join('')}</div>`));
+  const ld=P.len_dist, tot=ld.reduce((a,b)=>a+b,0), mx=Math.max(...ld);
+  p.appendChild(el(`<div class="panel"><h3>路径长度分布(触点数)</h3>
+    ${ld.map((v,i)=>i===0?'':`<div class="barrow"><span class="lbl">${i>=10?'10+':i} 个触点</span>
+      <span class="track"><i style="width:${(100*v/mx).toFixed(1)}%"></i></span>
+      <span class="val">${fmt0(v)} (${(100*v/tot).toFixed(1)}%)</span></div>`).join('')}</div>`));
+})();
+</script>
+</body>
+</html>
